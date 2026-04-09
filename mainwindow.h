@@ -35,16 +35,15 @@ private slots:
     void onPlaybackStateChanged(QMediaPlayer::PlaybackState state);
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
     void onPlayRequested(int index);
+    void toggleFullscreen();
 
 private:
-    void playCurrentFile();                 // 播放当前播放列表中的文件
+    void playCurrentFile(int position = 0); // 播放当前播放列表中的文件
     QString formatTime(qint64 ms) const;    // 格式化时间 mm:ss
     void autoAdjustHeightToVideo();
     QIcon coloredIcon(const QIcon& icon);
-    void savePlaylistAndPositions();          // 保存
-    void loadPlaylistAndPositions();          // 加载
-    QString getFileKey(const QUrl &url) const; // 生成唯一key
-    void cleanFinishedVideos();
+    void savePlaylist();          // 保存
+    void loadPlaylist();          // 加载
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -63,6 +62,7 @@ private:
     QSlider *m_progressSlider = nullptr;
     QLabel *m_timeLabel = nullptr;          // 当前时长 / 总时长
     QPushButton *m_playlistBtn = nullptr;
+    QPushButton *m_fullscreenBtn = nullptr;  // 全屏按钮
     QPushButton *m_prevBtn = nullptr;
     QPushButton *m_skipBackBtn = nullptr;
     QPushButton *m_playPauseBtn = nullptr;
@@ -73,15 +73,20 @@ private:
     QSlider *m_speedSlider = nullptr;
     QLabel *m_speedLabel = nullptr;
 
+    bool m_isFullscreen = false;
+
     // 播放列表
     QList<QUrl> m_playlist;
     int m_currentIndex = -1;
 
-    QTimer *m_fastTimer = nullptr;     // 长按快进/快退定时器
-    double m_normalPlaybackRate = 1.00;
+    int m_lastIndex;
+    int m_lastPosition = 0;
+
+    int m_normalSpeed = 100;
+    QTimer *m_longPressTimer = nullptr;
+    bool m_isLongPress = false;
 
     QSettings *m_settings = nullptr;
-    QMap<QString, qint64> m_positions;
 
     PlaylistDialog *m_playlistDialog = nullptr;
 };
