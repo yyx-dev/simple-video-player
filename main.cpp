@@ -21,8 +21,16 @@ int main(int argc, char *argv[])
 
         if (info.exists() && info.isFile()) {
             QUrl url = QUrl::fromLocalFile(filePath);
-            w.playSingleFile(url);
+            if (w.loadLastPlaying().first == url.toString()) {
+                w.playLastPlaying();
+            }
+            else {
+                w.playSingleFile(url);
+            }
         }
+    } else {
+        w.loadLastPlaying();
+        w.playLastPlaying();
     }
 
     return app.exec();

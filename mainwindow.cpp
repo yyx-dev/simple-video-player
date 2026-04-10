@@ -172,10 +172,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_longPressTimer = new QTimer(this);
     m_longPressTimer->setSingleShot(true);  // 单次触发
     connect(m_longPressTimer, &QTimer::timeout, this, [this]() {
-        m_isLongPress = true;
-        m_normalSpeed = m_speedSlider->value();
-        setPlaybackRate(200);
-    });
+            m_isLongPress = true;
+            m_normalSpeed = m_speedSlider->value();
+            setPlaybackRate(200);
+        });
 
     // 初始音量
     m_audioOutput->setVolume(1);
@@ -183,7 +183,6 @@ MainWindow::MainWindow(QWidget *parent)
     // 持久化设置
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/config.ini";
     m_settings = new QSettings(configPath, QSettings::IniFormat, this);
-    loadPlaylist();
 }
 
 void MainWindow::playSingleFile(const QUrl &url)
@@ -221,7 +220,7 @@ void MainWindow::onPlayRequested(int index)
     playCurrentFile();
 }
 
-void MainWindow::playCurrentFile(int position)
+void MainWindow::playCurrentFile()
 {
     if (m_currentIndex < 0 || m_currentIndex >= m_playlist.size())
         return;
@@ -229,22 +228,6 @@ void MainWindow::playCurrentFile(int position)
     const QUrl &url = m_playlist.at(m_currentIndex);
     m_player->setSource(url);
     m_player->play();
-
-    // 等待资源设置完成，异步设置播放时间
-    if (position > 0) {
-        disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
-        connect(m_player, &QMediaPlayer::mediaStatusChanged, this,
-                [this, url, position](QMediaPlayer::MediaStatus status) {
-                    if (status == QMediaPlayer::LoadedMedia) {
-                        m_player->setPosition(position);
-                        m_player->play();
-                        QString fileName = url.fileName();
-                        setWindowTitle(fileName.left(fileName.lastIndexOf('.')));
-                        disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
-                        connect(m_player, &QMediaPlayer::mediaStatusChanged, this, &MainWindow::onMediaStatusChanged);
-                    }
-                });
-    }
 
     // 更新窗口标题为当前文件名
     QString fileName = url.fileName();
@@ -363,6 +346,17 @@ void MainWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
         m_player->pause();
         m_player->setPosition(m_player->duration() - 100);
     }
+    else if (status == QMediaPlayer::LoadedMedia) {
+        // 媒体加载完成，检查是否有待跳转的位置
+        if (m_pendingPosition > 0 && m_player->isSeekable()) {
+            if (m_pendingPosition < m_player->duration()) {
+                m_player->setPosition(m_pendingPosition);
+            } else {
+                m_player->setPosition(m_player->duration() - 100);
+            }
+            m_pendingPosition = -1;
+        }
+    }
 }
 
 void MainWindow::toggleFullscreen()
@@ -438,7 +432,7 @@ void MainWindow::autoAdjustHeightToVideo()
     int desiredVideoHeight = static_cast<int>(videoWidgetWidth / aspectRatio);
 
     // 根据 videoWidget 当前宽度计算最合适的高度
-    setFixedHeight(desiredVideoHeight + 90); // 84
+    resize(width(), desiredVideoHeight + 90); // 84
 }
 
 QIcon MainWindow::coloredIcon(const QIcon& icon)
@@ -577,58 +571,52 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
-void MainWindow::loadPlaylist()
+QPair<QString, qint64> MainWindow::loadLastPlaying()
 {
-    m_playlist.clear();
-
     // 读取保存的播放列表
-    m_settings->beginGroup("Playlist");
-    QStringList paths = m_settings->value("playlist").toStringList();
-    for (const QString &path : paths) {
-        if (!path.isEmpty()) {
-            m_playlist.append(QUrl::fromLocalFile(path));
-        }
-    }
-    m_settings->endGroup();
-
     m_settings->beginGroup("Playing");
-    m_currentIndex = m_settings->value("lastVideoIndex", -1).toInt();
-    m_lastPosition = m_settings->value("lastVideoPosition", 0).toLongLong() - 5000;
-    if (m_lastPosition < 0) {
-        m_lastPosition = 0;
-    }
+    m_lastPlayingUrl = m_settings->value("lastPlayingUrl").toString();
+    m_lastPlayingPosition = m_settings->value("lastPlayingPosition", 0).toLongLong();
     m_settings->endGroup();
+    return {m_lastPlayingUrl, m_lastPlayingPosition};
+}
 
-    // 如果有视频播放
-    if (!m_playlist.isEmpty() && 0 <= m_currentIndex && m_currentIndex < m_playlist.size()) {
-        playCurrentFile(m_lastPosition);
+void MainWindow::playLastPlaying()
+{
+    if (!m_lastPlayingUrl.isEmpty()) {
+        // 检查文件是否存在
+        QUrl url = QUrl(m_lastPlayingUrl);
+        if (QFile::exists(url.toLocalFile())) {
+            m_playlist.clear();
+            m_playlist.append(url);
+            m_currentIndex = 0;
+
+            // 计算恢复位置
+            qint64 restorePosition = m_lastPlayingPosition - 5000;
+            if (restorePosition < 0) {
+                restorePosition = 0;
+            }
+
+            m_pendingPosition = restorePosition;
+            playCurrentFile();
+        }
     }
 }
 
 
-void MainWindow::savePlaylist()
+void MainWindow::saveLastPlaying()
 {
     // 保存播放列表
-    m_settings->beginGroup("Playlist");
-    m_settings->remove("");
-    QStringList paths;
-    for (const QUrl &url : m_playlist) {
-        paths << url.toLocalFile();
-    }
-    m_settings->setValue("playlist", paths);
-    m_settings->endGroup();
-
     m_settings->beginGroup("Playing");
     m_settings->remove("");
-    m_settings->setValue("lastVideoIndex", m_currentIndex);
-    m_settings->setValue("lastVideoPosition", m_player->position());
+    m_settings->setValue("lastPlayingUrl", m_player->source().toString());
+    m_settings->setValue("lastPlayingPosition", m_player->position());
     m_settings->endGroup();
-
     m_settings->sync();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    savePlaylist();
+    saveLastPlaying();
     QMainWindow::closeEvent(event);
 }

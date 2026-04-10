@@ -19,6 +19,8 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     void playSingleFile(const QUrl &url);
+    void playLastPlaying();
+    QPair<QString, qint64> loadLastPlaying();
 
 private slots:
     void openPlaylistDialog();           // 打开播放列表对话框
@@ -38,12 +40,12 @@ private slots:
     void toggleFullscreen();
 
 private:
-    void playCurrentFile(int position = 0); // 播放当前播放列表中的文件
+    void playCurrentFile(); // 播放当前播放列表中的文件
     QString formatTime(qint64 ms) const;    // 格式化时间 mm:ss
     void autoAdjustHeightToVideo();
     QIcon coloredIcon(const QIcon& icon);
-    void savePlaylist();          // 保存
-    void loadPlaylist();          // 加载
+    void saveLastPlaying();          // 保存
+
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -79,14 +81,14 @@ private:
     QList<QUrl> m_playlist;
     int m_currentIndex = -1;
 
-    int m_lastIndex;
-    int m_lastPosition = 0;
+    QString m_lastPlayingUrl;
+    qint64 m_lastPlayingPosition = 0;
+    int m_pendingPosition = -1;
 
     int m_normalSpeed = 100;
     QTimer *m_longPressTimer = nullptr;
     bool m_isLongPress = false;
 
     QSettings *m_settings = nullptr;
-
     PlaylistDialog *m_playlistDialog = nullptr;
 };
